@@ -1,13 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { User as UserIcon, CheckCircle2, Clock, Camera, LogIn, Upload, Mic, MicOff, Send, Type } from 'lucide-react';
 import { User } from '../lib/firebase';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../lib/utils';
 
 interface UploadScreenProps {
   user: User | null;
@@ -21,56 +16,60 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
   const [inputMode, setInputMode] = useState<'image' | 'text'>('image');
   const [textDescription, setTextDescription] = useState('');
   const [isListening, setIsListening] = useState(false);
-  const [recognition, setRecognition] = useState<any>(null);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = 'en-IN';
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition =
+      (window as Window & { SpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition ||
+      (window as Window & { webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
-      rec.onresult = (event: any) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-IN';
 
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-        setTextDescription(prev => prev + finalTranscript);
-      };
+    rec.onresult = (event: SpeechRecognitionEvent) => {
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) finalTranscript += event.results[i][0].transcript;
+      }
+      if (finalTranscript) setTextDescription(prev => prev + finalTranscript);
+    };
 
-      rec.onend = () => {
-        setIsListening(false);
-      };
+    rec.onerror = (event: SpeechRecognitionErrorEvent) => {
+      if (event.error === 'not-allowed') {
+        setSpeechError('Microphone access denied. Please allow microphone permissions and try again.');
+      } else {
+        setSpeechError('Voice input error. Please try again or type your description.');
+      }
+      setIsListening(false);
+    };
 
-      setRecognition(rec);
-    }
+    rec.onend = () => setIsListening(false);
+
+    recognitionRef.current = rec;
   }, []);
 
   const toggleListening = () => {
-    if (!recognition) {
-      alert("Speech recognition is not supported in your browser.");
+    const rec = recognitionRef.current;
+    if (!rec) {
+      setSpeechError('Speech recognition is not supported in your browser.');
       return;
     }
-
+    setSpeechError(null);
     if (isListening) {
-      recognition.stop();
+      rec.stop();
     } else {
-      recognition.start();
+      rec.start();
       setIsListening(true);
     }
   };
 
   const handleSubmitText = () => {
-    if (textDescription.trim()) {
-      processText(textDescription);
-    }
+    if (textDescription.trim()) processText(textDescription);
   };
 
   return (
@@ -83,7 +82,7 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
     >
       <div className="space-y-8">
         <div className="space-y-4">
-          <motion.span 
+          <motion.span
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="inline-block px-4 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-[0.2em]"
@@ -96,57 +95,64 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
               In Your Hands
             </span>
           </h2>
-          <p className="text-slate-400 text-lg max-w-md leading-relaxed">
-            Snap a photo, type a description, or use your voice to report urban problems in Namma Bengaluru. Gemini 3.1 Pro handles the rest.
+          <p className="text-slate-300 text-lg max-w-md leading-relaxed">
+            Snap a photo, type a description, or use your voice to report urban problems in Namma Bengaluru.
+            Gemini handles the rest.
           </p>
         </div>
 
-        <div className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10 w-fit">
-          <button 
+        <div
+          className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10 w-fit"
+          role="tablist"
+          aria-label="Reporting mode"
+        >
+          <button
             onClick={() => setInputMode('image')}
             aria-label="Switch to Visual reporting mode"
-            aria-pressed={inputMode === 'image'}
+            aria-selected={inputMode === 'image'}
+            role="tab"
             className={cn(
-              "px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2",
-              inputMode === 'image' ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-400 hover:text-white"
+              'px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2',
+              inputMode === 'image' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white'
             )}
           >
-            <Camera size={14} />
+            <Camera size={14} aria-hidden="true" />
             <span>Visual</span>
           </button>
-          <button 
+          <button
             onClick={() => setInputMode('text')}
             aria-label="Switch to Text and Voice reporting mode"
-            aria-pressed={inputMode === 'text'}
+            aria-selected={inputMode === 'text'}
+            role="tab"
             className={cn(
-              "px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2",
-              inputMode === 'text' ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-400 hover:text-white"
+              'px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2',
+              inputMode === 'text' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-slate-400 hover:text-white'
             )}
           >
-            <Type size={14} />
+            <Type size={14} aria-hidden="true" />
             <span>Text/Voice</span>
           </button>
         </div>
 
         {!user && (
           <div className="bg-blue-500/10 border border-blue-500/20 p-6 rounded-3xl flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400">
+            <div className="w-12 h-12 bg-blue-500/20 rounded-2xl flex items-center justify-center text-blue-400" aria-hidden="true">
               <UserIcon size={24} />
             </div>
             <div className="space-y-1">
               <p className="text-sm font-bold text-white">Sign in required</p>
-              <p className="text-xs text-slate-400">Please sign in with Google to report and track issues.</p>
+              <p className="text-xs text-slate-300">Please sign in with Google to report and track issues.</p>
             </div>
           </div>
         )}
 
         <div className="flex flex-wrap gap-4">
           <div className="flex items-center gap-3 px-6 py-3 rounded-2xl glass-card">
-            <CheckCircle2 size={20} className="text-green-400" />
+            <CheckCircle2 size={20} className="text-green-400" aria-hidden="true" />
             <span className="text-sm font-semibold text-slate-200">BBMP Integrated</span>
           </div>
           <div className="flex items-center gap-3 px-6 py-3 rounded-2xl glass-card">
-            <Clock size={20} className="text-amber-400" />
+            <Clock size={20} className="text-amber-400" aria-hidden="true" />
             <span className="text-sm font-semibold text-slate-200">Instant Routing</span>
           </div>
         </div>
@@ -154,8 +160,10 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
 
       <AnimatePresence mode="wait">
         {inputMode === 'image' ? (
-          <motion.div 
+          <motion.div
             key="image-input"
+            role="tabpanel"
+            aria-label="Visual reporting"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -167,91 +175,106 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
             }}
             tabIndex={0}
             role="button"
-            aria-label={user ? "Capture Incident or Upload Image" : "Sign In to Start Reporting"}
+            aria-label={user ? 'Capture Incident or Upload Image' : 'Sign In to Start Reporting'}
             className={cn(
-              "group relative h-[500px] glass-card rounded-[3rem] border-white/10 transition-all cursor-pointer flex flex-col items-center justify-center p-12 overflow-hidden animate-float",
-              user ? "hover:border-blue-500/50" : "opacity-50 grayscale"
+              'group relative h-[500px] glass-card rounded-[3rem] border-white/10 transition-all cursor-pointer flex flex-col items-center justify-center p-12 overflow-hidden animate-float',
+              user ? 'hover:border-blue-500/50' : 'opacity-50 grayscale'
             )}
           >
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-transparent to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-            
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-transparent to-purple-600/10 opacity-0 group-hover:opacity-100 transition-opacity duration-700" aria-hidden="true" />
+
             <div className="relative z-10 flex flex-col items-center gap-8 text-center">
-              <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center text-white border border-white/10 group-hover:scale-110 group-hover:bg-blue-600 transition-all duration-500 neo-glow">
+              <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center text-white border border-white/10 group-hover:scale-110 group-hover:bg-blue-600 transition-all duration-500 neo-glow" aria-hidden="true">
                 {user ? <Camera size={44} /> : <LogIn size={44} />}
               </div>
               <div className="space-y-2">
-                <p className="text-2xl font-display font-bold text-white">{user ? "Capture Incident" : "Sign In to Start"}</p>
-                <p className="text-slate-400">{user ? "Tap to snap or upload from gallery" : "Connect your account to report issues"}</p>
+                <p className="text-2xl font-display font-bold text-white">{user ? 'Capture Incident' : 'Sign In to Start'}</p>
+                <p className="text-slate-300">{user ? 'Tap to snap or upload from gallery' : 'Connect your account to report issues'}</p>
               </div>
               {user && (
                 <div className="flex items-center gap-2 text-white font-bold bg-white/10 px-6 py-3 rounded-full border border-white/10 group-hover:bg-white group-hover:text-black transition-colors">
-                  <Upload size={20} />
+                  <Upload size={20} aria-hidden="true" />
                   <span>Select File</span>
                 </div>
               )}
             </div>
-            
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/*" 
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
               capture="environment"
-              onChange={handleFileChange} 
+              onChange={handleFileChange}
               aria-hidden="true"
             />
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             key="text-input"
+            role="tabpanel"
+            aria-label="Text and voice reporting"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             className={cn(
-              "relative h-[500px] glass-card rounded-[3rem] border-white/10 p-10 flex flex-col gap-6",
-              !user && "opacity-50 grayscale"
+              'relative h-[500px] glass-card rounded-[3rem] border-white/10 p-10 flex flex-col gap-6',
+              !user && 'opacity-50 grayscale'
             )}
           >
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-display font-bold text-white" id="describe-issue-title">Describe Issue</h3>
-              <button 
+              <button
                 onClick={toggleListening}
                 disabled={!user}
                 className={cn(
-                  "w-12 h-12 rounded-full flex items-center justify-center transition-all",
-                  isListening ? "bg-red-500 animate-pulse text-white" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                  'w-12 h-12 rounded-full flex items-center justify-center transition-all',
+                  isListening ? 'bg-red-500 animate-pulse text-white' : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
                 )}
-                aria-label={isListening ? "Stop Voice Input" : "Start Voice Input"}
+                aria-label={isListening ? 'Stop Voice Input' : 'Start Voice Input'}
                 aria-pressed={isListening}
               >
-                {isListening ? <MicOff size={20} /> : <Mic size={20} />}
+                {isListening ? <MicOff size={20} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
               </button>
             </div>
 
+            {/* Surface speech recognition errors visibly */}
+            {speechError && (
+              <p role="alert" className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2">
+                {speechError}
+              </p>
+            )}
+
             <div className="relative flex-1">
-              <textarea 
+              <textarea
                 value={textDescription}
                 onChange={(e) => setTextDescription(e.target.value)}
-                placeholder={user ? "Describe the problem (e.g., 'Large pothole near Indiranagar metro station' or 'Street light not working in HSR Layout Sector 2')" : "Please sign in to report..."}
+                placeholder={
+                  user
+                    ? "Describe the problem (e.g., 'Large pothole near Indiranagar metro station')"
+                    : 'Please sign in to report…'
+                }
                 disabled={!user}
                 aria-labelledby="describe-issue-title"
-                className="w-full h-full bg-white/5 border border-white/10 rounded-[2rem] p-6 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 resize-none transition-colors"
+                maxLength={2000}
+                className="w-full h-full bg-white/5 border border-white/10 rounded-[2rem] p-6 text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-500/50 resize-none transition-colors"
               />
-              <div aria-live="polite" className="sr-only">
-                {isListening ? "Listening to your voice input..." : textDescription ? "Text description updated." : ""}
+              {/* aria-live status for voice input */}
+              <div aria-live="polite" aria-atomic="true" className="sr-only">
+                {isListening ? 'Listening to your voice input…' : textDescription ? 'Text description updated.' : ''}
               </div>
             </div>
 
-            <button 
+            <button
               onClick={handleSubmitText}
               disabled={!user || !textDescription.trim()}
               className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold uppercase tracking-widest hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 transition-all flex items-center justify-center gap-3 shadow-xl shadow-blue-600/20"
             >
-              <Send size={18} />
+              <Send size={18} aria-hidden="true" />
               <span>Submit Report</span>
             </button>
 
-            <div className="flex items-center gap-2 justify-center opacity-40">
+            <div className="flex items-center gap-2 justify-center opacity-40" aria-hidden="true">
               <div className="w-1 h-1 rounded-full bg-blue-500" />
               <p className="text-[10px] font-mono uppercase tracking-widest">Voice-to-Text Enabled</p>
             </div>

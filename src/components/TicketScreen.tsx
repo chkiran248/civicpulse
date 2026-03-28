@@ -2,12 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { CheckCircle2, MapPin, ExternalLink, ArrowRight, Zap, Download } from 'lucide-react';
 import { CivicTicket } from '../lib/gemini';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
+import { cn } from '../lib/utils';
 
 interface TicketScreenProps {
   ticket: CivicTicket | null;
@@ -153,11 +148,11 @@ export function TicketScreen({ ticket, reset }: TicketScreenProps) {
             <div className="relative z-10 space-y-10">
               <div className="flex items-center justify-between border-b border-black/10 pb-6">
                 <div>
-                  <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-slate-500">Official Receipt</p>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-slate-600">Official Receipt</p>
                   <h3 className="text-2xl font-display font-bold">CivicPulse Bengaluru</h3>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-slate-500">Ticket ID</p>
+                  <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-slate-600">Ticket ID</p>
                   <p className="text-lg font-mono font-bold">#{ticket.id}</p>
                 </div>
               </div>

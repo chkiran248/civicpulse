@@ -33,7 +33,7 @@ export function Header({ user, reset, setScreen, handleLogout, handleLogin }: He
           <Zap size={28} />
         </div>
         <div>
-          <h1 className="text-2xl font-display font-bold tracking-tight text-white">CivicPulse <span className="text-blue-500">BLR</span></h1>
+          <h1 className="text-2xl font-display font-bold tracking-tight text-white">CivicPulse <span className="text-blue-500">BLR v2</span></h1>
           <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-blue-400">Bengaluru Urban Intelligence</p>
         </div>
       </motion.div>
