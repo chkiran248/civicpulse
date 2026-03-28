@@ -55,8 +55,9 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
-         (request.auth.token.email == "chkiran@gmail.com" && request.auth.token.email_verified == true));
+        ((request.auth.token.email == "chkiran@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == 'admin'));
     }
 
     function isValidEmail(email) {
@@ -73,7 +74,7 @@ service cloud.firestore {
 
     function isRecent(dateStr) {
       return isValidDateString(dateStr) && 
-             duration.value(request.time - timestamp.value(dateStr)).abs() < duration.value(5, 'm');
+             duration.value(request.time - timestamp.value(dateStr)).abs() < duration.value(10, 'm');
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -90,9 +91,8 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUserSchema(data) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
-             hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'role']) &&
-             isValidEmail(data.email) &&
+      return hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'role']) &&
+             (!('email' in data) || isValidEmail(data.email)) &&
              (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
              (!('photoURL' in data) || data.photoURL == null || (isValidUrl(data.photoURL) && data.photoURL.size() < 500)) &&
              (!('role' in data) || data.role == null || data.role in ['admin', 'user']);
@@ -123,13 +123,14 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
       allow create: if isOwner(uid) && isValidUserSchema(request.resource.data) && 
+                      request.resource.data.keys().hasAll(['uid', 'email', 'createdAt']) &&
                       request.resource.data.uid == uid &&
                       isRecent(request.resource.data.createdAt) &&
-                      (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin());
+                      (request.resource.data.get('role', 'user') == 'user' || isAdmin());
       allow update: if (isOwner(uid) || isAdmin()) && 
                       isValidUserSchema(request.resource.data) &&
                       areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
-                      (isOwner(uid) ? (request.resource.data.role == resource.data.role || isAdmin()) : true);
+                      ((isOwner(uid) && !isAdmin()) ? !request.resource.data.diff(resource.data).modifiedKeys().hasAny(['role']) : true);
     }
 
     match /tickets/{ticketId} {

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, onAuthStateChanged, auth, db, signInWithPopup, googleProvider, signOut, collection, doc, setDoc, query, where, orderBy, onSnapshot, OperationType, handleFirestoreError } from './firebase';
+import { getDoc } from 'firebase/firestore';
 import { analyzeUrbanIssue, CivicTicket } from './gemini';
 import { getBengaluruNewsBriefing, NewsBrief } from './news';
 import { BLR_FACTS } from './constants';
