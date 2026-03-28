@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { User, onAuthStateChanged, auth, db, signInWithPopup, googleProvider, signOut, collection, doc, setDoc, query, where, orderBy, onSnapshot, OperationType, handleFirestoreError } from './firebase';
+import { User, onAuthStateChanged, auth, db, signInWithPopup, googleProvider, signOut, collection, doc, setDoc, query, where, orderBy, onSnapshot, serverTimestamp, OperationType, handleFirestoreError } from './firebase';
 import { getDoc } from 'firebase/firestore';
 import { analyzeUrbanIssue, CivicTicket } from './gemini';
 import { getBengaluruNewsBriefing, NewsBrief } from './news';
@@ -86,7 +86,7 @@ export function useCivicPulse() {
               displayName: currentUser.displayName,
               email: currentUser.email,
               photoURL: currentUser.photoURL,
-              createdAt: new Date().toISOString(),
+              createdAt: serverTimestamp(),
               role: 'user'
             });
           } else {
@@ -100,7 +100,7 @@ export function useCivicPulse() {
             
             // Bootstrap missing required fields if they don't exist
             if (!existingData?.uid) updateData.uid = currentUser.uid;
-            if (!existingData?.createdAt) updateData.createdAt = new Date().toISOString();
+            if (!existingData?.createdAt) updateData.createdAt = serverTimestamp();
             if (!existingData?.role) updateData.role = 'user';
             
             await setDoc(userRef, updateData, { merge: true });
@@ -179,10 +179,10 @@ export function useCivicPulse() {
         image: base64,
         lat: location?.lat || null,
         lng: location?.lng || null,
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
         status: 'Open'
       };
-      
+
       try {
         await setDoc(doc(db, 'tickets', ticketId), ticketData);
       } catch (err) {
@@ -238,7 +238,7 @@ export function useCivicPulse() {
         image: `https://picsum.photos/seed/${ticketId}/800/600?blur=2`, // Placeholder for text-only reports
         lat: location?.lat || null,
         lng: location?.lng || null,
-        createdAt: new Date().toISOString(),
+        createdAt: serverTimestamp(),
         status: 'Open'
       };
       

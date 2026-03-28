@@ -69,12 +69,12 @@ service cloud.firestore {
     }
 
     function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+      return dateStr is timestamp;
     }
 
     function isRecent(dateStr) {
-      return isValidDateString(dateStr) && 
-             duration.value(request.time - timestamp.value(dateStr)).abs() < duration.value(10, 'm');
+      return dateStr is timestamp &&
+             request.time - dateStr < duration.value(10, 'm');
     }
 
     function hasOnlyAllowedFields(fields) {
