@@ -31,6 +31,11 @@
   @apply bg-white/[0.05] backdrop-blur-md border border-white/[0.1] px-4 py-1.5 rounded-full;
 }
 
+/* Custom focus styles for accessibility */
+:focus-visible {
+  @apply outline-none ring-2 ring-blue-500 ring-offset-2 ring-offset-[#050505];
+}
+
 @keyframes shimmer {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
