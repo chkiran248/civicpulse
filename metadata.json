@@ -1,6 +1,6 @@
 {
-  "name": "CivicPulse",
-  "description": "AI-powered urban problem reporting. Snap a photo, and Gemini Vision automatically routes your complaint to the right city department.",
+  "name": "CivicPulse Bengaluru",
+  "description": "AI-powered urban problem reporting for Bengaluru. Snap a photo, and Gemini Vision automatically routes your complaint to BBMP, BESCOM, or BWSSB.",
   "requestFramePermissions": [
     "camera",
     "geolocation"

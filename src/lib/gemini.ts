@@ -3,6 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
 export interface CivicTicket {
+  id?: string;
   issueType: string;
   description: string;
   severity: "Low" | "Medium" | "High" | "Critical";
@@ -10,15 +11,45 @@ export interface CivicTicket {
   actionRequired: string;
   safetyRisk: boolean;
   estimatedResponseTime: string;
+  groundingUrls?: string[];
+  lat?: number | null;
+  lng?: number | null;
+  image?: string;
+  status?: string;
+  uid?: string;
+  createdAt?: string;
 }
 
-export async function analyzeUrbanIssue(base64Image: string, mimeType: string): Promise<CivicTicket> {
-  const model = "gemini-3-flash-preview";
+export async function analyzeUrbanIssue(
+  base64Image: string, 
+  mimeType: string, 
+  location?: { lat: number; lng: number }
+): Promise<CivicTicket> {
+  // Upgraded to gemini-3.1-pro-preview for complex image understanding
+  const model = "gemini-3.1-pro-preview";
   
-  const prompt = `Analyze this photo of an urban problem and provide a structured report for city officials. 
-  Identify the type of issue, its severity, the responsible city department, a formal description, the required action, and any immediate safety risks.
+  const prompt = `Analyze this photo of an urban problem in Bengaluru, Karnataka, India. 
+  Identify the type of issue, its severity, and the responsible city department.
   
-  Return the response in JSON format.`;
+  Responsible departments in Bengaluru include:
+  - BBMP (Bruhat Bengaluru Mahanagara Palike): For potholes, garbage, streetlights, drainage, and public spaces.
+  - BESCOM (Bangalore Electricity Supply Company): For power lines, transformers, and electrical hazards.
+  - BWSSB (Bangalore Water Supply and Sewerage Board): For water leaks, sewage overflows, and water supply issues.
+  - Bengaluru Traffic Police: For traffic signals, road blockages, and parking issues.
+  
+  Provide a formal description, the required action, and any immediate safety risks.
+  Use Google Maps data to verify if this is a known issue or to provide more context about the location if possible.
+  
+  Return the response in JSON format with the following structure:
+  {
+    "issueType": "Short name of the issue",
+    "description": "A formal description",
+    "severity": "Low" | "Medium" | "High" | "Critical",
+    "department": "The city department responsible",
+    "actionRequired": "Specific action needed",
+    "safetyRisk": boolean,
+    "estimatedResponseTime": "Typical response time"
+  }`;
 
   const response = await ai.models.generateContent({
     model,
@@ -36,25 +67,39 @@ export async function analyzeUrbanIssue(base64Image: string, mimeType: string): 
       },
     ],
     config: {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          issueType: { type: Type.STRING, description: "Short name of the issue (e.g., Pothole, Broken Streetlight)" },
-          description: { type: Type.STRING, description: "A formal description of the problem" },
-          severity: { type: Type.STRING, enum: ["Low", "Medium", "High", "Critical"] },
-          department: { type: Type.STRING, description: "The city department responsible (e.g., Public Works, Utilities, Sanitation)" },
-          actionRequired: { type: Type.STRING, description: "Specific action needed to fix the issue" },
-          safetyRisk: { type: Type.BOOLEAN, description: "Whether there is an immediate danger to the public" },
-          estimatedResponseTime: { type: Type.STRING, description: "Typical response time for this type of issue (e.g., 24-48 hours)" },
-        },
-        required: ["issueType", "description", "severity", "department", "actionRequired", "safetyRisk", "estimatedResponseTime"],
-      },
+      // responseMimeType and responseSchema are NOT allowed when using googleMaps
+      tools: [{ googleMaps: {} }],
+      toolConfig: location ? {
+        retrievalConfig: {
+          latLng: {
+            latitude: location.lat,
+            longitude: location.lng
+          }
+        }
+      } : undefined
     },
   });
 
   try {
-    return JSON.parse(response.text || "{}") as CivicTicket;
+    let text = response.text || "{}";
+    
+    // Extract JSON if it's wrapped in markdown code blocks
+    const jsonMatch = text.match(/```json\n([\s\S]*?)\n```/) || text.match(/```([\s\S]*?)```/);
+    if (jsonMatch) {
+      text = jsonMatch[1];
+    }
+    
+    const ticket = JSON.parse(text) as CivicTicket;
+    
+    // Extract grounding URLs if available
+    const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+    if (chunks) {
+      ticket.groundingUrls = chunks
+        .filter(chunk => chunk.maps?.uri)
+        .map(chunk => chunk.maps!.uri);
+    }
+    
+    return ticket;
   } catch (e) {
     console.error("Failed to parse Gemini response", e);
     throw new Error("Failed to analyze image");

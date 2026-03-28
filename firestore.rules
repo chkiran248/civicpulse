@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string
+    //   - email: string (required)
+    //   - photoURL: string
+    //   - createdAt: string (required)
+    //
+    // Collection: tickets
+    // Document ID: {ticketId}
+    // Fields:
+    //   - id: string
+    //   - uid: string (required) - Owner of the ticket
+    //   - issueType: string (required)
+    //   - description: string
+    //   - severity: string (required, enum: Low, Medium, High, Critical)
+    //   - department: string (required)
+    //   - actionRequired: string
+    //   - safetyRisk: bool
+    //   - estimatedResponseTime: string
+    //   - image: string (Base64)
+    //   - lat: number
+    //   - lng: number
+    //   - createdAt: string (required)
+    //   - status: string (enum: Open, In Progress, Resolved)
+    //   - groundingUrls: list (strings)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+         (request.auth.token.email == "chkiran@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             data.uid is string &&
+             data.createdAt is string;
+    }
+
+    function isValidTicket(data) {
+      return data.keys().hasAll(['uid', 'issueType', 'severity', 'department', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.issueType is string && data.issueType.size() < 100 &&
+             data.severity in ['Low', 'Medium', 'High', 'Critical'] &&
+             data.department is string &&
+             data.createdAt is string &&
+             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
+             (!('image' in data) || (data.image is string && data.image.size() < 2000000)) &&
+             (!('lat' in data) || data.lat is number) &&
+             (!('lng' in data) || data.lng is number);
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid) && isValidUser(request.resource.data);
+      allow update: if isOwner(uid) && isValidUser(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+    }
+
+    match /tickets/{ticketId} {
+      // Tickets are private to the reporter by default
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidTicket(request.resource.data);
+      allow update: if isDocOwner() && isValidTicket(request.resource.data) &&
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Ticket": {
+      "title": "Civic Ticket",
+      "description": "A reported urban issue ticket",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "issueType": { "type": "string" },
+        "description": { "type": "string" },
+        "severity": { "type": "string", "enum": ["Low", "Medium", "High", "Critical"] },
+        "department": { "type": "string" },
+        "actionRequired": { "type": "string" },
+        "safetyRisk": { "type": "boolean" },
+        "estimatedResponseTime": { "type": "string" },
+        "image": { "type": "string", "description": "Base64 image data" },
+        "lat": { "type": "number" },
+        "lng": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["Open", "In Progress", "Resolved"] },
+        "groundingUrls": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      },
+      "required": ["uid", "issueType", "severity", "department", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/tickets/{ticketId}": {
+      "schema": "Ticket",
+      "description": "Civic tickets reported by users"
+    }
+  }
+}
