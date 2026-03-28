@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { User, onAuthStateChanged, auth, db, signInWithPopup, googleProvider, signOut, collection, doc, setDoc, query, where, orderBy, onSnapshot, OperationType, handleFirestoreError } from './firebase';
 import { analyzeUrbanIssue, CivicTicket } from './gemini';
+import { getBengaluruNewsBriefing, NewsBrief } from './news';
 
 export type Screen = 'upload' | 'analyzing' | 'ticket' | 'history';
 
@@ -13,6 +14,8 @@ export function useCivicPulse() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [history, setHistory] = useState<CivicTicket[]>([]);
+  const [newsBrief, setNewsBrief] = useState<NewsBrief | null>(null);
+  const [isNewsLoading, setIsNewsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [analyzingFact, setAnalyzingFact] = useState(0);
 
@@ -32,6 +35,36 @@ export function useCivicPulse() {
       return () => clearInterval(interval);
     }
   }, [screen]);
+
+  useEffect(() => {
+    // Initial news fetch
+    refreshNews();
+    
+    // Check for 6 AM refresh
+    let lastRefreshDate = '';
+    const interval = setInterval(() => {
+      const now = new Date();
+      const today = now.toLocaleDateString();
+      if (now.getHours() === 6 && now.getMinutes() === 0 && lastRefreshDate !== today) {
+        lastRefreshDate = today;
+        refreshNews();
+      }
+    }, 30000); // Check every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, []);
+
+  const refreshNews = async () => {
+    setIsNewsLoading(true);
+    try {
+      const brief = await getBengaluruNewsBriefing();
+      setNewsBrief(brief);
+    } catch (err) {
+      console.error("News refresh failed:", err);
+    } finally {
+      setIsNewsLoading(false);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -123,7 +156,7 @@ export function useCivicPulse() {
     setScreen('analyzing');
     setError(null);
     try {
-      const result = await analyzeUrbanIssue(base64, mimeType, location || undefined);
+      const result = await analyzeUrbanIssue({ base64Image: base64, mimeType }, location || undefined);
       
       const ticketId = `CP-${Math.floor(Math.random() * 90000) + 10000}`;
       const ticketData = {
@@ -146,7 +179,59 @@ export function useCivicPulse() {
       setTicket(ticketData);
       setScreen('ticket');
     } catch (err) {
-      setError("Analysis failed. Please try again with a clearer photo.");
+      console.error("Image processing error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("safety")) {
+        setError("Analysis blocked by safety filters. Please ensure the photo is appropriate.");
+      } else {
+        setError("Analysis failed. Please try again with a clearer photo or more details.");
+      }
+      setScreen('upload');
+    }
+  };
+
+  const processText = async (text: string) => {
+    if (!user) {
+      setError("Please sign in to report an issue.");
+      return;
+    }
+    if (!text.trim()) {
+      setError("Please provide a description of the issue.");
+      return;
+    }
+    setScreen('analyzing');
+    setError(null);
+    try {
+      const result = await analyzeUrbanIssue({ textDescription: text }, location || undefined);
+      
+      const ticketId = `CP-${Math.floor(Math.random() * 90000) + 10000}`;
+      const ticketData = {
+        ...result,
+        id: ticketId,
+        uid: user.uid,
+        image: `https://picsum.photos/seed/${ticketId}/800/600?blur=2`, // Placeholder for text-only reports
+        lat: location?.lat || null,
+        lng: location?.lng || null,
+        createdAt: new Date().toISOString(),
+        status: 'Open'
+      };
+      
+      try {
+        await setDoc(doc(db, 'tickets', ticketId), ticketData);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, `tickets/${ticketId}`);
+      }
+
+      setTicket(ticketData);
+      setScreen('ticket');
+    } catch (err) {
+      console.error("Text processing error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("safety")) {
+        setError("Analysis blocked by safety filters. Please ensure the description is appropriate.");
+      } else {
+        setError("Analysis failed. Please try again with a more detailed description.");
+      }
       setScreen('upload');
     }
   };
@@ -167,6 +252,8 @@ export function useCivicPulse() {
     user, setUser,
     isAuthReady, setIsAuthReady,
     history, setHistory,
+    newsBrief, setNewsBrief,
+    isNewsLoading,
     fileInputRef,
     analyzingFact,
     blrFacts,
@@ -174,6 +261,8 @@ export function useCivicPulse() {
     handleLogout,
     handleFileChange,
     processImage,
+    processText,
+    refreshNews,
     reset
   };
 }

@@ -32,7 +32,7 @@ vi.mock('@google/genai', () => {
 
 describe('analyzeUrbanIssue', () => {
   it('should return a CivicTicket when analysis is successful', async () => {
-    const result = await analyzeUrbanIssue('base64data', 'image/png');
+    const result = await analyzeUrbanIssue({ base64Image: 'base64data', mimeType: 'image/png' });
     expect(result.issueType).toBe('Pothole');
     expect(result.severity).toBe('High');
     expect(result.department).toBe('BBMP');

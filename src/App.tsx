@@ -7,6 +7,7 @@ import { UploadScreen } from './components/UploadScreen';
 import { AnalyzingScreen } from './components/AnalyzingScreen';
 import { TicketScreen } from './components/TicketScreen';
 import { HistoryScreen } from './components/HistoryScreen';
+import { NewsBriefing } from './components/NewsBriefing';
 
 function App() {
   const {
@@ -15,12 +16,16 @@ function App() {
     error,
     user,
     history,
+    newsBrief,
+    isNewsLoading,
     fileInputRef,
     analyzingFact,
     blrFacts,
     handleLogin,
     handleLogout,
     handleFileChange,
+    processText,
+    refreshNews,
     reset
   } = useCivicPulse();
 
@@ -53,12 +58,24 @@ function App() {
 
           <AnimatePresence mode="wait">
             {screen === 'upload' && (
-              <UploadScreen 
-                user={user} 
-                handleLogin={handleLogin} 
-                fileInputRef={fileInputRef} 
-                handleFileChange={handleFileChange} 
-              />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+                <div className="lg:col-span-2">
+                  <UploadScreen 
+                    user={user} 
+                    handleLogin={handleLogin} 
+                    fileInputRef={fileInputRef} 
+                    handleFileChange={handleFileChange} 
+                    processText={processText}
+                  />
+                </div>
+                <div className="lg:col-span-1">
+                  <NewsBriefing 
+                    newsBrief={newsBrief} 
+                    isLoading={isNewsLoading} 
+                    onRefresh={refreshNews} 
+                  />
+                </div>
+              </div>
             )}
 
             {screen === 'analyzing' && (
@@ -91,7 +108,7 @@ function App() {
               <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-white">
                 <span className="font-display font-bold text-xs">CP</span>
               </div>
-              <p className="text-[10px] font-mono uppercase tracking-widest">CivicPulse Bengaluru v2.0</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest">CivicPulse Bengaluru v2.2</p>
             </div>
             <div className="flex items-center gap-8 text-[10px] font-mono uppercase tracking-widest text-slate-500">
               <a href="#" className="hover:text-blue-400 transition-colors">Privacy Policy</a>
