@@ -48,10 +48,14 @@ function App() {
           handleLogin={handleLogin} 
         />
 
-        <main className="relative z-10 pt-32 pb-20 px-8 max-w-7xl mx-auto">
+        <main id="main-content" className="relative z-10 pt-32 pb-20 px-8 max-w-7xl mx-auto">
           {error && (
-            <div className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm font-medium flex items-center justify-center gap-2 animate-shake">
-              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            <div 
+              className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm font-medium flex items-center justify-center gap-2 animate-shake"
+              role="alert"
+              aria-live="assertive"
+            >
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" aria-hidden="true" />
               {error}
             </div>
           )}
@@ -108,7 +112,7 @@ function App() {
               <div className="w-8 h-8 bg-slate-800 rounded-lg flex items-center justify-center text-white">
                 <span className="font-display font-bold text-xs">CP</span>
               </div>
-              <p className="text-[10px] font-mono uppercase tracking-widest">CivicPulse Bengaluru v2.2</p>
+              <p className="text-[10px] font-mono uppercase tracking-widest">CivicPulse Bengaluru v2.4</p>
             </div>
             <div className="flex items-center gap-8 text-[10px] font-mono uppercase tracking-widest text-slate-500">
               <a href="#" className="hover:text-blue-400 transition-colors">Privacy Policy</a>

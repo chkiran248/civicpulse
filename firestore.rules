@@ -9,30 +9,31 @@ service cloud.firestore {
     // Collection: users
     // Document ID: {uid}
     // Fields:
-    //   - uid: string (required)
-    //   - displayName: string
-    //   - email: string (required)
-    //   - photoURL: string
-    //   - createdAt: string (required)
+    //   - uid: string (required, immutable) - User's unique ID
+    //   - displayName: string (optional, max 100 chars)
+    //   - email: string (required, format: email)
+    //   - photoURL: string (optional, format: url)
+    //   - createdAt: string (required, immutable, format: iso8601)
+    //   - role: string (optional, enum: ['admin', 'user'], default: 'user')
     //
     // Collection: tickets
     // Document ID: {ticketId}
     // Fields:
-    //   - id: string
-    //   - uid: string (required) - Owner of the ticket
-    //   - issueType: string (required)
-    //   - description: string
-    //   - severity: string (required, enum: Low, Medium, High, Critical)
-    //   - department: string (required)
-    //   - actionRequired: string
-    //   - safetyRisk: bool
-    //   - estimatedResponseTime: string
-    //   - image: string (Base64)
-    //   - lat: number
-    //   - lng: number
-    //   - createdAt: string (required)
-    //   - status: string (enum: Open, In Progress, Resolved)
-    //   - groundingUrls: list (strings)
+    //   - id: string (optional, max 50 chars)
+    //   - uid: string (required, immutable) - Owner of the ticket
+    //   - issueType: string (required, max 100 chars)
+    //   - description: string (optional, max 2000 chars)
+    //   - severity: string (required, enum: ['Low', 'Medium', 'High', 'Critical'])
+    //   - department: string (required, max 100 chars)
+    //   - actionRequired: string (optional, max 1000 chars)
+    //   - safetyRisk: bool (optional)
+    //   - estimatedResponseTime: string (optional, max 50 chars)
+    //   - image: string (optional, max 5MB, Base64)
+    //   - lat: number (optional)
+    //   - lng: number (optional)
+    //   - createdAt: string (required, immutable, format: iso8601)
+    //   - status: string (optional, enum: ['Open', 'In Progress', 'Resolved'], default: 'Open')
+    //   - groundingUrls: list (optional, max 10 items, strings max 500 chars)
     //
     // ===============================================================
 
@@ -62,28 +63,57 @@ service cloud.firestore {
       return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     }
 
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
-             data.uid == request.auth.uid &&
-             isValidEmail(data.email) &&
-             data.uid is string &&
-             data.createdAt is string;
+    function isValidUrl(url) {
+      return url is string && (url.matches("^https://.*") || url.matches("^http://.*"));
     }
 
-    function isValidTicket(data) {
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isRecent(dateStr) {
+      return isValidDateString(dateStr) && 
+             duration.value(request.time - timestamp.value(dateStr)).abs() < duration.value(5, 'm');
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      let diff = request.resource.data.diff(resource.data);
+      return !diff.modifiedKeys().hasAny(fields) && !diff.removedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUserSchema(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'displayName', 'email', 'photoURL', 'createdAt', 'role']) &&
+             isValidEmail(data.email) &&
+             (!('displayName' in data) || data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (!('photoURL' in data) || data.photoURL == null || (isValidUrl(data.photoURL) && data.photoURL.size() < 500)) &&
+             (!('role' in data) || data.role == null || data.role in ['admin', 'user']);
+    }
+
+    function isValidTicketSchema(data) {
       return data.keys().hasAll(['uid', 'issueType', 'severity', 'department', 'createdAt']) &&
-             data.uid == request.auth.uid &&
+             hasOnlyAllowedFields(['id', 'uid', 'issueType', 'description', 'severity', 'department', 'actionRequired', 'safetyRisk', 'estimatedResponseTime', 'image', 'lat', 'lng', 'createdAt', 'status', 'groundingUrls']) &&
              data.issueType is string && data.issueType.size() < 100 &&
              data.severity in ['Low', 'Medium', 'High', 'Critical'] &&
-             data.department is string &&
-             data.createdAt is string &&
-             (!('description' in data) || (data.description is string && data.description.size() < 2000)) &&
-             (!('image' in data) || (data.image is string && data.image.size() < 5000000)) &&
+             data.department is string && data.department.size() < 100 &&
+             (!('description' in data) || data.description == null || (data.description is string && data.description.size() < 2000)) &&
+             (!('actionRequired' in data) || data.actionRequired == null || (data.actionRequired is string && data.actionRequired.size() < 1000)) &&
+             (!('safetyRisk' in data) || data.safetyRisk == null || data.safetyRisk is bool) &&
+             (!('estimatedResponseTime' in data) || data.estimatedResponseTime == null || (data.estimatedResponseTime is string && data.estimatedResponseTime.size() < 50)) &&
+             (!('image' in data) || data.image == null || (data.image is string && data.image.size() < 5000000)) &&
              (!('lat' in data) || data.lat is number || data.lat == null) &&
              (!('lng' in data) || data.lng is number || data.lng == null) &&
-             (!('status' in data) || data.status in ['Open', 'In Progress', 'Resolved']) &&
-             (!('id' in data) || data.id is string) &&
-             (!('groundingUrls' in data) || data.groundingUrls is list);
+             (!('status' in data) || data.status == null || data.status in ['Open', 'In Progress', 'Resolved']) &&
+             (!('id' in data) || data.id == null || (data.id is string && data.id.size() < 50)) &&
+             (!('groundingUrls' in data) || data.groundingUrls == null || (data.groundingUrls is list && data.groundingUrls.size() <= 10));
     }
 
     // ===============================================================
@@ -92,17 +122,25 @@ service cloud.firestore {
 
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create: if isOwner(uid) && isValidUser(request.resource.data);
-      allow update: if isOwner(uid) && isValidUser(request.resource.data) && 
-                      request.resource.data.uid == resource.data.uid;
+      allow create: if isOwner(uid) && isValidUserSchema(request.resource.data) && 
+                      request.resource.data.uid == uid &&
+                      isRecent(request.resource.data.createdAt) &&
+                      (!('role' in request.resource.data) || request.resource.data.role == 'user' || isAdmin());
+      allow update: if (isOwner(uid) || isAdmin()) && 
+                      isValidUserSchema(request.resource.data) &&
+                      areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+                      (isOwner(uid) ? (request.resource.data.role == resource.data.role || isAdmin()) : true);
     }
 
     match /tickets/{ticketId} {
-      // Tickets are private to the reporter by default
       allow read: if isDocOwner() || isAdmin();
-      allow create: if isAuthenticated() && isValidTicket(request.resource.data);
-      allow update: if isDocOwner() && isValidTicket(request.resource.data) &&
-                      request.resource.data.uid == resource.data.uid;
+      allow create: if isAuthenticated() && isValidTicketSchema(request.resource.data) &&
+                      request.resource.data.uid == request.auth.uid &&
+                      isRecent(request.resource.data.createdAt);
+      allow update: if (isDocOwner() || isAdmin()) && 
+                      isValidTicketSchema(request.resource.data) &&
+                      areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+                      (isDocOwner() ? (request.resource.data.uid == resource.data.uid || isAdmin()) : true);
       allow delete: if isDocOwner() || isAdmin();
     }
   }

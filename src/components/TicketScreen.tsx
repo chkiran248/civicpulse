@@ -70,6 +70,7 @@ export function TicketScreen({ ticket, reset }: TicketScreenProps) {
               alt="Uploaded urban issue" 
               className="w-full h-[400px] object-cover group-hover:scale-110 transition-transform duration-700"
               referrerPolicy="no-referrer"
+              loading="lazy"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
             <div className="absolute bottom-6 left-6 right-6 flex items-center justify-between">
@@ -101,6 +102,7 @@ export function TicketScreen({ ticket, reset }: TicketScreenProps) {
                 alt="Map Placeholder" 
                 className="w-full h-full object-cover opacity-50"
                 referrerPolicy="no-referrer"
+                loading="lazy"
               />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="flex flex-col items-center gap-2 text-blue-400">

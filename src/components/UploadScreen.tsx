@@ -213,7 +213,7 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
             )}
           >
             <div className="flex items-center justify-between">
-              <h3 className="text-xl font-display font-bold text-white">Describe Issue</h3>
+              <h3 className="text-xl font-display font-bold text-white" id="describe-issue-title">Describe Issue</h3>
               <button 
                 onClick={toggleListening}
                 disabled={!user}
@@ -222,19 +222,25 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
                   isListening ? "bg-red-500 animate-pulse text-white" : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
                 )}
                 aria-label={isListening ? "Stop Voice Input" : "Start Voice Input"}
+                aria-pressed={isListening}
               >
                 {isListening ? <MicOff size={20} /> : <Mic size={20} />}
               </button>
             </div>
 
-            <textarea 
-              value={textDescription}
-              onChange={(e) => setTextDescription(e.target.value)}
-              placeholder={user ? "Describe the problem (e.g., 'Large pothole near Indiranagar metro station' or 'Street light not working in HSR Layout Sector 2')" : "Please sign in to report..."}
-              disabled={!user}
-              aria-label="Problem description"
-              className="flex-1 bg-white/5 border border-white/10 rounded-[2rem] p-6 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 resize-none transition-colors"
-            />
+            <div className="relative flex-1">
+              <textarea 
+                value={textDescription}
+                onChange={(e) => setTextDescription(e.target.value)}
+                placeholder={user ? "Describe the problem (e.g., 'Large pothole near Indiranagar metro station' or 'Street light not working in HSR Layout Sector 2')" : "Please sign in to report..."}
+                disabled={!user}
+                aria-labelledby="describe-issue-title"
+                className="w-full h-full bg-white/5 border border-white/10 rounded-[2rem] p-6 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 resize-none transition-colors"
+              />
+              <div aria-live="polite" className="sr-only">
+                {isListening ? "Listening to your voice input..." : textDescription ? "Text description updated." : ""}
+              </div>
+            </div>
 
             <button 
               onClick={handleSubmitText}

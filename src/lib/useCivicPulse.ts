@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { User, onAuthStateChanged, auth, db, signInWithPopup, googleProvider, signOut, collection, doc, setDoc, query, where, orderBy, onSnapshot, OperationType, handleFirestoreError } from './firebase';
 import { analyzeUrbanIssue, CivicTicket } from './gemini';
 import { getBengaluruNewsBriefing, NewsBrief } from './news';
+import { BLR_FACTS } from './constants';
 
 export type Screen = 'upload' | 'analyzing' | 'ticket' | 'history';
 
@@ -19,22 +20,35 @@ export function useCivicPulse() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [analyzingFact, setAnalyzingFact] = useState(0);
 
-  const blrFacts = [
-    "BBMP manages over 1,400 km of arterial roads in Bengaluru.",
-    "BESCOM serves over 13 million consumers across 8 districts.",
-    "BWSSB was the first to implement water recycling in India.",
-    "Bengaluru Traffic Police uses AI-powered signals at 50+ junctions.",
-    "Namma Bengaluru is home to 1,200+ parks and open spaces."
-  ];
+  const blrFacts = useMemo(() => BLR_FACTS, []);
+
+  const refreshNews = useCallback(async () => {
+    if (isNewsLoading) return;
+    setIsNewsLoading(true);
+    try {
+      const brief = await getBengaluruNewsBriefing();
+      setNewsBrief(brief);
+    } catch (err) {
+      console.error("News refresh failed:", err);
+    } finally {
+      setIsNewsLoading(false);
+    }
+  }, [isNewsLoading]);
 
   useEffect(() => {
+    let isMounted = true;
     if (screen === 'analyzing') {
       const interval = setInterval(() => {
-        setAnalyzingFact(prev => (prev + 1) % blrFacts.length);
+        if (isMounted) {
+          setAnalyzingFact(prev => (prev + 1) % blrFacts.length);
+        }
       }, 3000);
-      return () => clearInterval(interval);
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
     }
-  }, [screen]);
+  }, [screen, blrFacts.length]);
 
   useEffect(() => {
     // Initial news fetch
@@ -45,26 +59,16 @@ export function useCivicPulse() {
     const interval = setInterval(() => {
       const now = new Date();
       const today = now.toLocaleDateString();
+      // Only refresh if it's 6 AM and we haven't refreshed today
       if (now.getHours() === 6 && now.getMinutes() === 0 && lastRefreshDate !== today) {
         lastRefreshDate = today;
         refreshNews();
       }
-    }, 30000); // Check every 30 seconds
+    }, 60000); // Check every minute
     
     return () => clearInterval(interval);
-  }, []);
-
-  const refreshNews = async () => {
-    setIsNewsLoading(true);
-    try {
-      const brief = await getBengaluruNewsBriefing();
-      setNewsBrief(brief);
-    } catch (err) {
-      console.error("News refresh failed:", err);
-    } finally {
-      setIsNewsLoading(false);
-    }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on mount
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -72,13 +76,34 @@ export function useCivicPulse() {
       setIsAuthReady(true);
       if (currentUser) {
         try {
-          await setDoc(doc(db, 'users', currentUser.uid), {
-            uid: currentUser.uid,
-            displayName: currentUser.displayName,
-            email: currentUser.email,
-            photoURL: currentUser.photoURL,
-            createdAt: new Date().toISOString()
-          }, { merge: true });
+          const userRef = doc(db, 'users', currentUser.uid);
+          const userSnap = await getDoc(userRef);
+          
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              uid: currentUser.uid,
+              displayName: currentUser.displayName,
+              email: currentUser.email,
+              photoURL: currentUser.photoURL,
+              createdAt: new Date().toISOString(),
+              role: 'user'
+            });
+          } else {
+            // Update profile but ensure required fields are present for schema validation
+            const existingData = userSnap.data();
+            const updateData: any = {
+              displayName: currentUser.displayName,
+              photoURL: currentUser.photoURL,
+              email: currentUser.email,
+            };
+            
+            // Bootstrap missing required fields if they don't exist
+            if (!existingData?.uid) updateData.uid = currentUser.uid;
+            if (!existingData?.createdAt) updateData.createdAt = new Date().toISOString();
+            if (!existingData?.role) updateData.role = 'user';
+            
+            await setDoc(userRef, updateData, { merge: true });
+          }
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}`);
         }
@@ -118,37 +143,24 @@ export function useCivicPulse() {
     }
   }, [user, isAuthReady]);
 
-  const handleLogin = async () => {
+  const handleLogin = useCallback(async () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (err) {
       setError("Login failed. Please try again.");
     }
-  };
+  }, []);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     try {
       await signOut(auth);
       setScreen('upload');
     } catch (err) {
       setError("Logout failed.");
     }
-  };
+  }, []);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      setImage(base64);
-      processImage(base64, file.type);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const processImage = async (base64: string, mimeType: string) => {
+  const processImage = useCallback(async (base64: string, mimeType: string) => {
     if (!user) {
       setError("Please sign in to report an issue.");
       return;
@@ -188,9 +200,22 @@ export function useCivicPulse() {
       }
       setScreen('upload');
     }
-  };
+  }, [user, location]);
 
-  const processText = async (text: string) => {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      setImage(base64);
+      processImage(base64, file.type);
+    };
+    reader.readAsDataURL(file);
+  }, [processImage]);
+
+  const processText = useCallback(async (text: string) => {
     if (!user) {
       setError("Please sign in to report an issue.");
       return;
@@ -234,14 +259,14 @@ export function useCivicPulse() {
       }
       setScreen('upload');
     }
-  };
+  }, [user, location]);
 
-  const reset = () => {
+  const reset = useCallback(() => {
     setScreen('upload');
     setImage(null);
     setTicket(null);
     setError(null);
-  };
+  }, []);
 
   return {
     screen, setScreen,

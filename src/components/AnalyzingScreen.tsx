@@ -41,7 +41,10 @@ export function AnalyzingScreen({ analyzingFact, blrFacts }: AnalyzingScreenProp
           />
         </div>
         
-        <div className="glass-card p-6 rounded-3xl border-white/10 text-center min-h-[100px] flex items-center justify-center">
+        <div 
+          className="glass-card p-6 rounded-3xl border-white/10 text-center min-h-[100px] flex items-center justify-center"
+          aria-live="polite"
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={analyzingFact}
