@@ -1,0 +1,8 @@
+{
+  "name": "CivicPulse",
+  "description": "AI-powered urban problem reporting. Snap a photo, and Gemini Vision automatically routes your complaint to the right city department.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
