@@ -2,7 +2,12 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Clock, MapPin, CheckCircle2, Zap } from 'lucide-react';
 import { CivicTicket } from '../lib/gemini';
-import { cn } from '../lib/utils';
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
 
 interface HistoryScreenProps {
   history: CivicTicket[];
@@ -125,9 +130,9 @@ export function HistoryScreen({ history, setScreen, setTicket }: HistoryScreenPr
                     <div className="w-6 h-6 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-400">
                       <Zap size={12} />
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{item.department}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.department}</span>
                   </div>
-                  <p className="text-[10px] font-mono text-slate-400">{new Date(item.createdAt).toLocaleDateString()}</p>
+                  <p className="text-[10px] font-mono text-slate-500">{new Date(item.createdAt).toLocaleDateString()}</p>
                 </div>
               </div>
             </motion.div>

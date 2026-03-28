@@ -2,12 +2,11 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useCivicPulse } from './useCivicPulse';
 
+// Mock firebase
 vi.mock('./firebase', () => ({
   auth: {},
   db: {},
-  analytics: {},
-  logEvent: vi.fn(),
-  onAuthStateChanged: vi.fn((_auth, cb) => {
+  onAuthStateChanged: vi.fn((auth, cb) => {
     setTimeout(() => cb(null), 0);
     return () => {};
   }),
@@ -20,43 +19,31 @@ vi.mock('./firebase', () => ({
   query: vi.fn(),
   where: vi.fn(),
   orderBy: vi.fn(),
-  limit: vi.fn(),
   onSnapshot: vi.fn(() => () => {}),
-  serverTimestamp: vi.fn(() => ({ _serverTimestamp: true })),
   OperationType: { WRITE: 'write', LIST: 'list' },
-  handleFirestoreError: vi.fn(),
+  handleFirestoreError: vi.fn()
 }));
 
+// Mock news
 vi.mock('./news', () => ({
   getBengaluruNewsBriefing: vi.fn(async () => ({
-    summary: 'Mock summary',
+    summary: "Mock summary",
     headlines: [],
-    lastUpdated: new Date().toISOString(),
-  })),
+    lastUpdated: new Date().toISOString()
+  }))
 }));
 
+// Mock gemini
 vi.mock('./gemini', () => ({
   analyzeUrbanIssue: vi.fn(async () => ({
-    issueType: 'Pothole',
-    description: 'Test pothole',
-    severity: 'High',
-    department: 'BBMP',
-    actionRequired: 'Fill it',
+    issueType: "Pothole",
+    description: "Test pothole",
+    severity: "High",
+    department: "BBMP",
+    actionRequired: "Fill it",
     safetyRisk: true,
-    estimatedResponseTime: '2 days',
-  })),
-}));
-
-vi.mock('./utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils')>();
-  return {
-    ...actual,
-    generateTicketId: vi.fn(() => 'CP-99999'),
-  };
-});
-
-vi.mock('firebase/firestore', () => ({
-  getDoc: vi.fn(async () => ({ exists: () => false })),
+    estimatedResponseTime: "2 days"
+  }))
 }));
 
 describe('useCivicPulse Hook', () => {
@@ -82,7 +69,9 @@ describe('useCivicPulse Hook', () => {
 
   it('resets state correctly', async () => {
     const { result } = renderHook(() => useCivicPulse());
-    await act(async () => { await Promise.resolve(); });
+    await act(async () => {
+      await Promise.resolve();
+    });
     act(() => {
       result.current.setScreen('history');
       result.current.reset();
@@ -92,10 +81,14 @@ describe('useCivicPulse Hook', () => {
 
   it('processes image and creates ticket correctly', async () => {
     const { result } = renderHook(() => useCivicPulse());
-    await act(async () => { await Promise.resolve(); });
-
+    await act(async () => {
+      await Promise.resolve();
+    });
+    
+    // Simulate login
     act(() => {
-      result.current.setUser({ uid: 'test-uid', email: 'test@example.com' } as never);
+      // @ts-ignore
+      result.current.setUser({ uid: 'test-uid', email: 'test@example.com' });
       result.current.setIsAuthReady(true);
     });
 
@@ -110,10 +103,14 @@ describe('useCivicPulse Hook', () => {
 
   it('processes text and creates ticket correctly', async () => {
     const { result } = renderHook(() => useCivicPulse());
-    await act(async () => { await Promise.resolve(); });
-
+    await act(async () => {
+      await Promise.resolve();
+    });
+    
+    // Simulate login
     act(() => {
-      result.current.setUser({ uid: 'test-uid', email: 'test@example.com' } as never);
+      // @ts-ignore
+      result.current.setUser({ uid: 'test-uid', email: 'test@example.com' });
       result.current.setIsAuthReady(true);
     });
 
@@ -127,13 +124,16 @@ describe('useCivicPulse Hook', () => {
 
   it('handles analysis errors correctly', async () => {
     const { analyzeUrbanIssue } = await import('./gemini');
-    vi.mocked(analyzeUrbanIssue).mockRejectedValueOnce(new Error('Analysis failed'));
+    vi.mocked(analyzeUrbanIssue).mockRejectedValueOnce(new Error("Analysis failed"));
 
     const { result } = renderHook(() => useCivicPulse());
-    await act(async () => { await Promise.resolve(); });
-
+    await act(async () => {
+      await Promise.resolve();
+    });
+    
     act(() => {
-      result.current.setUser({ uid: 'test-uid', email: 'test@example.com' } as never);
+      // @ts-ignore
+      result.current.setUser({ uid: 'test-uid', email: 'test@example.com' });
       result.current.setIsAuthReady(true);
     });
 
@@ -142,6 +142,6 @@ describe('useCivicPulse Hook', () => {
     });
 
     expect(result.current.screen).toBe('upload');
-    expect(result.current.error).toBe('Analysis failed. Please try again with a more detailed description.');
+    expect(result.current.error).toBe("Analysis failed. Please try again with a more detailed description.");
   });
 });

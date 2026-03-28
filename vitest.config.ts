@@ -5,17 +5,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: 'jsdom',
-    environmentOptions: {
-      jsdom: {
-        url: 'http://localhost:3000',
-      },
-    },
     globals: true,
     setupFiles: './src/test/setup.ts',
-    include: [
-      'src/test/**/*.test.{ts,tsx}',
-      'src/lib/useCivicPulse.test.ts',
-      'src/lib/firebase.test.ts',
-    ],
   },
 });

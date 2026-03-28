@@ -1,23 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import {
-  User, onAuthStateChanged, auth, db,
-  signInWithPopup, googleProvider, signOut,
-  collection, doc, setDoc, query, where, orderBy, limit,
-  onSnapshot, serverTimestamp,
-  OperationType, handleFirestoreError,
-  analytics, logEvent,
-} from './firebase';
-import { getDoc } from 'firebase/firestore';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { auth, db, googleProvider, OperationType, handleFirestoreError, collection, doc, setDoc, getDoc, query, where, orderBy, onSnapshot } from './firebase';
+import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { analyzeUrbanIssue, CivicTicket } from './gemini';
 import { getBengaluruNewsBriefing, NewsBrief } from './news';
 import { compressImage } from './imageUtils';
 import { BLR_FACTS } from './constants';
-import { generateTicketId, sanitizeUserText } from './utils';
 
 export type Screen = 'upload' | 'analyzing' | 'ticket' | 'history';
-
-const TICKET_QUERY_LIMIT = 50;
-const NEWS_CACHE_DURATION = 3_600_000; // 1 hour
 
 export function useCivicPulse() {
   const [screen, setScreen] = useState<Screen>('upload');
@@ -32,60 +21,67 @@ export function useCivicPulse() {
   const [isNewsLoading, setIsNewsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [analyzingFact, setAnalyzingFact] = useState(0);
-  const isNewsLoadingRef = useRef(false);
   const newsCache = useRef<{ data: NewsBrief; timestamp: number } | null>(null);
 
-  // BLR_FACTS is a module-level constant — no memo needed
-  const blrFacts = BLR_FACTS;
+  const blrFacts = useMemo(() => BLR_FACTS, []);
 
   const refreshNews = useCallback(async () => {
-    if (isNewsLoadingRef.current) return;
-
-    // Serve from 1-hour cache if available
-    if (newsCache.current && Date.now() - newsCache.current.timestamp < NEWS_CACHE_DURATION) {
+    if (isNewsLoading) return;
+    
+    // Simple 1-hour cache
+    const CACHE_DURATION = 3600000;
+    if (newsCache.current && (Date.now() - newsCache.current.timestamp < CACHE_DURATION)) {
       setNewsBrief(newsCache.current.data);
       return;
     }
 
-    isNewsLoadingRef.current = true;
     setIsNewsLoading(true);
     try {
       const brief = await getBengaluruNewsBriefing();
       setNewsBrief(brief);
       newsCache.current = { data: brief, timestamp: Date.now() };
     } catch (err) {
-      console.error('News refresh failed:', err);
+      console.error("News refresh failed:", err);
     } finally {
-      isNewsLoadingRef.current = false;
       setIsNewsLoading(false);
     }
-  }, []);
+  }, [isNewsLoading]);
 
-  // Cycle BLR facts while analyzing
   useEffect(() => {
-    if (screen !== 'analyzing') return;
-    const interval = setInterval(() => {
-      setAnalyzingFact(prev => (prev + 1) % blrFacts.length);
-    }, 3000);
-    return () => clearInterval(interval);
+    let isMounted = true;
+    if (screen === 'analyzing') {
+      const interval = setInterval(() => {
+        if (isMounted) {
+          setAnalyzingFact(prev => (prev + 1) % blrFacts.length);
+        }
+      }, 3000);
+      return () => {
+        isMounted = false;
+        clearInterval(interval);
+      };
+    }
   }, [screen, blrFacts.length]);
 
-  // Initial news fetch + daily 6 AM refresh
   useEffect(() => {
+    // Initial news fetch
     refreshNews();
+    
+    // Check for 6 AM refresh
     let lastRefreshDate = '';
     const interval = setInterval(() => {
       const now = new Date();
       const today = now.toLocaleDateString();
+      // Only refresh if it's 6 AM and we haven't refreshed today
       if (now.getHours() === 6 && now.getMinutes() === 0 && lastRefreshDate !== today) {
         lastRefreshDate = today;
         refreshNews();
       }
-    }, 60000);
+    }, 60000); // Check every minute
+    
     return () => clearInterval(interval);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on mount
 
-  // Auth state — create / sync user document
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
@@ -94,28 +90,31 @@ export function useCivicPulse() {
         try {
           const userRef = doc(db, 'users', currentUser.uid);
           const userSnap = await getDoc(userRef);
+          
           if (!userSnap.exists()) {
             await setDoc(userRef, {
               uid: currentUser.uid,
               displayName: currentUser.displayName,
               email: currentUser.email,
               photoURL: currentUser.photoURL,
-              createdAt: serverTimestamp(),
-              role: 'user',
+              createdAt: new Date().toISOString(),
+              role: 'user'
             });
-            logEvent(analytics, 'sign_up', { method: 'google' });
           } else {
+            // Update profile but ensure required fields are present for schema validation
             const existingData = userSnap.data();
-            const updateData: Record<string, unknown> = {
+            const updateData: any = {
               displayName: currentUser.displayName,
               photoURL: currentUser.photoURL,
               email: currentUser.email,
             };
+            
+            // Bootstrap missing required fields if they don't exist
             if (!existingData?.uid) updateData.uid = currentUser.uid;
-            if (!existingData?.createdAt) updateData.createdAt = serverTimestamp();
+            if (!existingData?.createdAt) updateData.createdAt = new Date().toISOString();
             if (!existingData?.role) updateData.role = 'user';
+            
             await setDoc(userRef, updateData, { merge: true });
-            logEvent(analytics, 'login', { method: 'google' });
           }
         } catch (err) {
           handleFirestoreError(err, OperationType.WRITE, `users/${currentUser.uid}`);
@@ -125,40 +124,42 @@ export function useCivicPulse() {
     return () => unsubscribe();
   }, []);
 
-  // Geolocation
   useEffect(() => {
-    if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => console.info('Location access denied — reports will not include GPS coordinates.')
-    );
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => console.log("Location access denied")
+      );
+    }
   }, []);
 
-  // Real-time ticket history (limited to 50)
   useEffect(() => {
-    if (!user || !isAuthReady) return;
-    const q = query(
-      collection(db, 'tickets'),
-      where('uid', '==', user.uid),
-      orderBy('createdAt', 'desc'),
-      limit(TICKET_QUERY_LIMIT)
-    );
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const tickets = snapshot.docs.map(d => ({ ...d.data(), id: d.id })) as CivicTicket[];
+    if (user && isAuthReady) {
+      const q = query(
+        collection(db, 'tickets'),
+        where('uid', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const tickets = snapshot.docs.map(doc => ({
+          ...doc.data(),
+          id: doc.id
+        })) as CivicTicket[];
         setHistory(tickets);
-      },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'tickets')
-    );
-    return () => unsubscribe();
+      }, (err) => {
+        handleFirestoreError(err, OperationType.LIST, 'tickets');
+      });
+      
+      return () => unsubscribe();
+    }
   }, [user, isAuthReady]);
 
   const handleLogin = useCallback(async () => {
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch {
-      setError('Login failed. Please try again.');
+    } catch (err) {
+      setError("Login failed. Please try again.");
     }
   }, []);
 
@@ -166,43 +167,49 @@ export function useCivicPulse() {
     try {
       await signOut(auth);
       setScreen('upload');
-    } catch {
-      setError('Logout failed.');
+    } catch (err) {
+      setError("Logout failed.");
     }
   }, []);
 
   const processImage = useCallback(async (base64: string, mimeType: string) => {
-    if (!user) { setError('Please sign in to report an issue.'); return; }
+    if (!user) {
+      setError("Please sign in to report an issue.");
+      return;
+    }
     setScreen('analyzing');
     setError(null);
     try {
       const result = await analyzeUrbanIssue({ base64Image: base64, mimeType }, location || undefined);
-      const ticketId = generateTicketId();
-      const ticketData: CivicTicket = {
+      
+      const ticketId = `CP-${Math.floor(Math.random() * 90000) + 10000}`;
+      const ticketData = {
         ...result,
         id: ticketId,
         uid: user.uid,
         image: base64,
-        lat: location?.lat ?? null,
-        lng: location?.lng ?? null,
-        createdAt: serverTimestamp() as unknown as string,
-        status: 'Open',
+        lat: location?.lat || null,
+        lng: location?.lng || null,
+        createdAt: new Date().toISOString(),
+        status: 'Open'
       };
+      
       try {
         await setDoc(doc(db, 'tickets', ticketId), ticketData);
-        logEvent(analytics, 'ticket_created', { method: 'image', severity: result.severity });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `tickets/${ticketId}`);
       }
-      // Release base64 from state — Firestore has the source of truth
-      setImage(null);
+
       setTicket(ticketData);
       setScreen('ticket');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg.includes('safety')
-        ? 'Analysis blocked by safety filters. Please ensure the photo is appropriate.'
-        : 'Analysis failed. Please try again with a clearer photo or more details.');
+      console.error("Image processing error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("safety")) {
+        setError("Analysis blocked by safety filters. Please ensure the photo is appropriate.");
+      } else {
+        setError("Analysis failed. Please try again with a clearer photo or more details.");
+      }
       setScreen('upload');
     }
   }, [user, location]);
@@ -210,14 +217,18 @@ export function useCivicPulse() {
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const originalBase64 = event.target?.result as string;
       setImage(originalBase64);
+      
+      // Compress before processing
       try {
         const compressedBase64 = await compressImage(originalBase64);
         processImage(compressedBase64, 'image/jpeg');
-      } catch {
+      } catch (err) {
+        console.error("Compression failed, using original:", err);
         processImage(originalBase64, file.type);
       }
     };
@@ -225,37 +236,47 @@ export function useCivicPulse() {
   }, [processImage]);
 
   const processText = useCallback(async (text: string) => {
-    if (!user) { setError('Please sign in to report an issue.'); return; }
-    const sanitized = sanitizeUserText(text);
-    if (!sanitized) { setError('Please provide a description of the issue.'); return; }
+    if (!user) {
+      setError("Please sign in to report an issue.");
+      return;
+    }
+    if (!text.trim()) {
+      setError("Please provide a description of the issue.");
+      return;
+    }
     setScreen('analyzing');
     setError(null);
     try {
-      const result = await analyzeUrbanIssue({ textDescription: sanitized }, location || undefined);
-      const ticketId = generateTicketId();
-      const ticketData: CivicTicket = {
+      const result = await analyzeUrbanIssue({ textDescription: text }, location || undefined);
+      
+      const ticketId = `CP-${Math.floor(Math.random() * 90000) + 10000}`;
+      const ticketData = {
         ...result,
         id: ticketId,
         uid: user.uid,
-        image: `https://picsum.photos/seed/${ticketId}/800/600?blur=2`,
-        lat: location?.lat ?? null,
-        lng: location?.lng ?? null,
-        createdAt: serverTimestamp() as unknown as string,
-        status: 'Open',
+        image: `https://picsum.photos/seed/${ticketId}/800/600?blur=2`, // Placeholder for text-only reports
+        lat: location?.lat || null,
+        lng: location?.lng || null,
+        createdAt: new Date().toISOString(),
+        status: 'Open'
       };
+      
       try {
         await setDoc(doc(db, 'tickets', ticketId), ticketData);
-        logEvent(analytics, 'ticket_created', { method: 'text', severity: result.severity });
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, `tickets/${ticketId}`);
       }
+
       setTicket(ticketData);
       setScreen('ticket');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg.includes('safety')
-        ? 'Analysis blocked by safety filters. Please ensure the description is appropriate.'
-        : 'Analysis failed. Please try again with a more detailed description.');
+      console.error("Text processing error:", err);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes("safety")) {
+        setError("Analysis blocked by safety filters. Please ensure the description is appropriate.");
+      } else {
+        setError("Analysis failed. Please try again with a more detailed description.");
+      }
       setScreen('upload');
     }
   }, [user, location]);
@@ -287,6 +308,6 @@ export function useCivicPulse() {
     processImage,
     processText,
     refreshNews,
-    reset,
+    reset
   };
 }
