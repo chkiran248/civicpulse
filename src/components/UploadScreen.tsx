@@ -104,6 +104,8 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
         <div className="flex gap-2 p-1 bg-white/5 rounded-2xl border border-white/10 w-fit">
           <button 
             onClick={() => setInputMode('image')}
+            aria-label="Switch to Visual reporting mode"
+            aria-pressed={inputMode === 'image'}
             className={cn(
               "px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2",
               inputMode === 'image' ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-400 hover:text-white"
@@ -114,6 +116,8 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
           </button>
           <button 
             onClick={() => setInputMode('text')}
+            aria-label="Switch to Text and Voice reporting mode"
+            aria-pressed={inputMode === 'text'}
             className={cn(
               "px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2",
               inputMode === 'text' ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-400 hover:text-white"
@@ -228,6 +232,7 @@ export function UploadScreen({ user, handleLogin, fileInputRef, handleFileChange
               onChange={(e) => setTextDescription(e.target.value)}
               placeholder={user ? "Describe the problem (e.g., 'Large pothole near Indiranagar metro station' or 'Street light not working in HSR Layout Sector 2')" : "Please sign in to report..."}
               disabled={!user}
+              aria-label="Problem description"
               className="flex-1 bg-white/5 border border-white/10 rounded-[2rem] p-6 text-white placeholder:text-slate-600 focus:outline-none focus:border-blue-500/50 resize-none transition-colors"
             />
 

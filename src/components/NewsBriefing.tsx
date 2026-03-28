@@ -26,6 +26,7 @@ export function NewsBriefing({ newsBrief, isLoading, onRefresh }: NewsBriefingPr
           onClick={onRefresh}
           disabled={isLoading}
           className="p-2 hover:bg-white/5 rounded-full transition-colors disabled:opacity-50"
+          aria-label="Refresh News Briefing"
           title="Refresh News"
         >
           <RefreshCw className={`w-4 h-4 text-slate-400 ${isLoading ? 'animate-spin' : ''}`} />
@@ -54,13 +55,14 @@ export function NewsBriefing({ newsBrief, isLoading, onRefresh }: NewsBriefingPr
             <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest px-1">Latest Headlines</p>
             <div className="grid gap-2">
               {newsBrief.headlines.map((headline, idx) => (
-                <a 
-                  key={idx}
-                  href={headline.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl transition-all"
-                >
+                  <a 
+                    key={idx}
+                    href={headline.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Read full article: ${headline.title} from ${headline.source}`}
+                    className="group flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl transition-all"
+                  >
                   <div className="flex flex-col gap-1">
                     <span className="text-xs font-medium text-slate-200 group-hover:text-blue-400 transition-colors">
                       {headline.title}
