@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { User, onAuthStateChanged, auth, db, signInWithPopup, googleProvider, signOut, collection, doc, setDoc, query, where, orderBy, onSnapshot, OperationType, handleFirestoreError } from './firebase';
-import { getDoc } from 'firebase/firestore';
+import { auth, db, googleProvider, OperationType, handleFirestoreError, collection, doc, setDoc, getDoc, query, where, orderBy, onSnapshot } from './firebase';
+import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { analyzeUrbanIssue, CivicTicket } from './gemini';
 import { getBengaluruNewsBriefing, NewsBrief } from './news';
+import { compressImage } from './imageUtils';
 import { BLR_FACTS } from './constants';
 
 export type Screen = 'upload' | 'analyzing' | 'ticket' | 'history';
@@ -20,15 +21,25 @@ export function useCivicPulse() {
   const [isNewsLoading, setIsNewsLoading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [analyzingFact, setAnalyzingFact] = useState(0);
+  const newsCache = useRef<{ data: NewsBrief; timestamp: number } | null>(null);
 
   const blrFacts = useMemo(() => BLR_FACTS, []);
 
   const refreshNews = useCallback(async () => {
     if (isNewsLoading) return;
+    
+    // Simple 1-hour cache
+    const CACHE_DURATION = 3600000;
+    if (newsCache.current && (Date.now() - newsCache.current.timestamp < CACHE_DURATION)) {
+      setNewsBrief(newsCache.current.data);
+      return;
+    }
+
     setIsNewsLoading(true);
     try {
       const brief = await getBengaluruNewsBriefing();
       setNewsBrief(brief);
+      newsCache.current = { data: brief, timestamp: Date.now() };
     } catch (err) {
       console.error("News refresh failed:", err);
     } finally {
@@ -209,9 +220,17 @@ export function useCivicPulse() {
 
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      setImage(base64);
-      processImage(base64, file.type);
+      const originalBase64 = event.target?.result as string;
+      setImage(originalBase64);
+      
+      // Compress before processing
+      try {
+        const compressedBase64 = await compressImage(originalBase64);
+        processImage(compressedBase64, 'image/jpeg');
+      } catch (err) {
+        console.error("Compression failed, using original:", err);
+        processImage(originalBase64, file.type);
+      }
     };
     reader.readAsDataURL(file);
   }, [processImage]);

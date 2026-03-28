@@ -108,12 +108,12 @@ service cloud.firestore {
              (!('actionRequired' in data) || data.actionRequired == null || (data.actionRequired is string && data.actionRequired.size() < 1000)) &&
              (!('safetyRisk' in data) || data.safetyRisk == null || data.safetyRisk is bool) &&
              (!('estimatedResponseTime' in data) || data.estimatedResponseTime == null || (data.estimatedResponseTime is string && data.estimatedResponseTime.size() < 50)) &&
-             (!('image' in data) || data.image == null || (data.image is string && data.image.size() < 5000000)) &&
+             (!('image' in data) || data.image == null || (data.image is string && data.image.size() < 1048576)) && // 1MB Limit
              (!('lat' in data) || data.lat is number || data.lat == null) &&
              (!('lng' in data) || data.lng is number || data.lng == null) &&
              (!('status' in data) || data.status == null || data.status in ['Open', 'In Progress', 'Resolved']) &&
              (!('id' in data) || data.id == null || (data.id is string && data.id.size() < 50)) &&
-             (!('groundingUrls' in data) || data.groundingUrls == null || (data.groundingUrls is list && data.groundingUrls.size() <= 10));
+             (!('groundingUrls' in data) || data.groundingUrls == null || (data.groundingUrls is list && data.groundingUrls.size() <= 10 && data.groundingUrls.all(url, isValidUrl(url))));
     }
 
     // ===============================================================

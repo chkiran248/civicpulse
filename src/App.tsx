@@ -48,7 +48,7 @@ function App() {
           handleLogin={handleLogin} 
         />
 
-        <main id="main-content" className="relative z-10 pt-32 pb-20 px-8 max-w-7xl mx-auto">
+        <main id="main-content" className="relative z-10 pt-32 pb-20 px-8 max-w-7xl mx-auto" role="main">
           {error && (
             <div 
               className="mb-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm font-medium flex items-center justify-center gap-2 animate-shake"
@@ -115,9 +115,9 @@ function App() {
               <p className="text-[10px] font-mono uppercase tracking-widest">CivicPulse Bengaluru v2.4</p>
             </div>
             <div className="flex items-center gap-8 text-[10px] font-mono uppercase tracking-widest text-slate-500">
-              <a href="#" className="hover:text-blue-400 transition-colors">Privacy Policy</a>
-              <a href="#" className="hover:text-blue-400 transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-blue-400 transition-colors">BBMP Portal</a>
+              <a href="#" className="hover:text-blue-400 transition-colors" aria-label="Read our Privacy Policy">Privacy Policy</a>
+              <a href="#" className="hover:text-blue-400 transition-colors" aria-label="Read our Terms of Service">Terms of Service</a>
+              <a href="#" className="hover:text-blue-400 transition-colors" aria-label="Visit BBMP Official Portal">BBMP Portal</a>
             </div>
             <p className="text-[10px] font-mono text-slate-600">© 2026 CivicPulse Intelligence. Bengaluru, KA.</p>
           </div>
